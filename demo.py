@@ -27,33 +27,6 @@ def load_directory_files(dir):
 
 	return reports_data
 
-def access_tree_elem(tree ,feature_name):
-	tree_elem = tree
-
-	args = feature_name.split('_')
-	for arg in args:
-		tree_elem = tree_elem[arg]
-
-	# print tree_elem
-	return tree_elem
-
-def extract_features(data_files):
-	features_names = ['info_score', 'info_duration']
-
-	features_list = []
-	for data_file in data_files:
-		feature_i = {}
-		for feature_name in features_names:
-			elem = access_tree_elem(data_file, feature_name)
-			feature_i[feature_name] = elem
-
-		features_list.append(feature_i)
-
-	vec = DictVectorizer()
-	vectored_data = vec.fit_transform(features_list)
-	return vectored_data
-
-
 def main():
 	parser = argparse.ArgumentParser(description='ClusterML demo.')
 	parser.add_argument('-d', '--data-dir', default='data', type=str)

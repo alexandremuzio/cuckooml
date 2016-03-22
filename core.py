@@ -9,8 +9,8 @@ def dict_as_json(dict_x):
 	return json.dumps(dict_x, indent=1)
 
 class OSOperation(object):
-	def __init__(self, op_type, name, entry):
-		self.type = op_type.lower()
+	"""Base abstract class for OS operations."""
+	def __init__(self, name, entry):
 		self.name = name.lower()
 		self.entry = entry.lower()
 
@@ -26,26 +26,44 @@ class OSOperation(object):
 	def __repr__(self):
 		return self.name +  self.entry
 
-	def get_type(self):
-		return self.type
-
+	#Methods to be overrriden
 	def get_name(self):
-		return self.name
+		raise NotImplementedError
 
 	def get_operation(self):
-		return "empty_operation"
+		raise NotImplementedError
+
+	def get_type(self):
+		raise NotImplementedError
 
 class ReadOperation(OSOperation):
+	def get_type(self):
+		return 'file'
+
 	def get_operation(self):
 		return self.name + "|" + self.entry
+
+class VirusTotalOperation(OSOperation):
+	def get_type(self):
+		return 'virus_total'
+
+	def get_operation(self):
+		return self.name + '|' + self.entry
+
+class NetworkOperation(OSOperation):
+	def get_type(self):
+		return 'network'
+
+	def get_operation(self):
+		return self.name + '|' + self.entry
 
 class BehavioralProfile(object):
 	def __init__(self, data_file):
 		self.data_file = data_file
 		self.os_operations = []
-		self.__create_profile()
+		self._create_profile()
 
-	def __access_tree_elem(self, tree ,feature_name):
+	def _access_tree_elem(self, tree ,feature_name):
 		tree_elem = tree
 
 		args = feature_name.split('_')
@@ -57,29 +75,36 @@ class BehavioralProfile(object):
 
 		return tree_elem
 
-	def __create_profile(self):
-		#start with behavior data from files
-		sum_elem = self.__access_tree_elem(self.data_file, "behavior_summary")
-		# print json.dumps(sum_elem, indent=1)
+	def _create_profile(self):
+		#behavior data from files
+		sum_elem = self._access_tree_elem(self.data_file, "behavior_summary")
+		# print dict_as_json(sum_elem)
 		for sys_call_name, sys_calls in sum_elem.iteritems():
 			for sys_call in sys_calls:
 				if (sys_call_name == 'dll_loaded' or \
 					sys_call_name == 'file_opened' or \
 					sys_call_name == 'regkey_opened' or \
 					sys_call_name == 'regkey_read'):
-						self.os_operations.append(ReadOperation('file', sys_call_name, sys_call))
+						self.os_operations.append(ReadOperation(sys_call_name, sys_call))
+
+		#behavior data from virustotal
+		scan_elem = self._access_tree_elem(self.data_file, "virustotal_scans")
+		# print dict_as_json(scan_elem)
+		for av_name, av_scan in scan_elem.iteritems():
+			if av_scan['result'] is None: continue 
+			self.os_operations.append(VirusTotalOperation(av_name, av_scan['result']))
+
+		#TODO - behavior data from networking 
 
 	def get_operations(self):
 		return self.os_operations
 
-
 class FeatureExtractor(object):
 	def __init__(self, behavioral_profiles):
 		self.behavioral_profiles = behavioral_profiles
-		self.__create_feature_set()
-		pass
+		self._create_feature_set()
 
-	def __create_feature_set(self):
+	def _create_feature_set(self):
 		self.feature_set = set()
 
 		#ignore features that appear only once
@@ -100,7 +125,7 @@ class FeatureExtractor(object):
 			self.feature_set.add(op.get_operation())
 			features_list.append({op.get_type(): op.get_operation()})
 
-		# print dict_as_json(features_list)
+		#print dict_as_json(features_list)
 		#create vectorized data
 		vec = DictVectorizer()
 
@@ -116,7 +141,6 @@ class FeatureExtractor(object):
 
 	def get_vectorized_data(self):
 		return self.vectorized_data
-
 
 class KMeans(object):
 	def __init__(self, vectorized_data):
