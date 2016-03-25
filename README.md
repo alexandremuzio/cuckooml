@@ -15,6 +15,10 @@ Check out the [images directory](images/os_operations) for the preliminary resul
 
 ## Example
 
+An example of the Silhouette Metric applied to KMeans clustering (in 3 clusters) using API calls for feature extraction:
+
+![alt text](images/api_calls/kmeans_sil_3.png "Kmeans example")
+
 ## How to run
 Requirementes: python3 scikit-learn, numpy, matlabplotlib
 
