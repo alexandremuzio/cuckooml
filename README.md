@@ -11,6 +11,7 @@ For clustering, I used KMeans and varied the number of clusters from 2 to 7.
 
 Check out the [images directory](images/os_operations) for the preliminary results on the OS Operations approach and [images directory](images/api_calls) for the API approach.
 
+From the initial analysis, it looks like 3/4 clusters produce the most significant results. 
 
 ## Example
 
