@@ -27,26 +27,34 @@ def load_directory_files(dir):
 
 	return reports_data
 
-def main():
-	parser = argparse.ArgumentParser(description='ClusterML demo.')
-	parser.add_argument('-d', '--data-dir', default='data', type=str)
-	args = parser.parse_args()
-
-	data_files = load_directory_files(args.data_dir)
-
+def cluster_with_os_operations(data_files):
 	behavioral_profiles = [BehavioralProfile(data_file) for data_file in data_files]
 
 	# print behavioral_profiles[0].get_operations()[0:10]
 	feature_extractor = FeatureExtractor(behavioral_profiles)
 	vectorized_data = feature_extractor.get_vectorized_data()
+	reduced_data = feature_extractor.get_reduced_data()
 
-	k_means = KMeans(vectorized_data)
+	k_means = KMeans(reduced_data, 6)
 	k_means.run_clustering()
 
-	#TODO - verify results
-	import numpy as np
-	np.savetxt('results.txt', k_means.labels())
+	#plot data
+	k_means.vizualize_results_in_2d(reduced_data)
 
+	#TODO - verify results
+	# import numpy as np
+	# np.savetxt('results.txt', k_means.labels())
+
+
+def main():
+	parser = argparse.ArgumentParser(description='ClusterML demo.')
+	parser.add_argument('-d', '--data-dir', default='data', type=str)
+	args = parser.parse_args()
+
+	#Reports loaded in memory
+	data_files = load_directory_files(args.data_dir)
+
+	cluster_with_os_operations(data_files)
 
 if __name__ == '__main__':
 	print('CuckooML demo')
