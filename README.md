@@ -1,6 +1,5 @@
 # cuckooml
 
-## Explanation
 I am prototyping some ideas for the [the Honeynet Project](https://github.com/hgascon/cuckooml) (Google Summer Of Code 2016). The malware analysis reports from cuckoo sandbox I used are from [here](https://github.com/hgascon/cuckooml).
 
 I tried out 2 strategies:
