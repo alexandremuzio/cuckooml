@@ -1,22 +1,72 @@
+import json
 from collections import defaultdict
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 from sklearn import cluster
 from sklearn import decomposition
 from sklearn.feature_extraction import DictVectorizer
 
-
+#Utils
 def extract_section_from_data_file(data_file, section):
 	return data_file[section]
 
 def dict_as_json(dict_x):
-	import json
 	return json.dumps(dict_x, indent=1)
 
+#################################################################
+#Abstract behavioral profile
+class BehavioralProfile(object):
+	def __init__(self, data_file):
+		self.data_file = data_file
+
+	#Access a section in data file (tree)
+	def _access_data_elem(self, tree ,section_name):
+		tree_elem = tree
+
+		args = section_name.split('_')
+		for arg in args:
+			if arg not in tree_elem: 
+				return dict()
+
+			tree_elem = tree_elem[arg]
+
+		return tree_elem
+
+	def _create_profile(self):
+		raise NotImplementedError
+
+#################################################################
+#Behavioral profile based on idea 1 (abstraction of system calls)
+class OSOperationsProfile(BehavioralProfile):
+	def __init__(self, data_file):
+		super().__init__(data_file)
+		self.os_operations = []
+		self._create_profile()
+
+	def _create_profile(self):
+		#behavior summary data from files
+		summary_elem = self._access_data_elem(self.data_file, 'behavior_summary')
+		# print dict_as_json(summary_elem)
+		for sys_call_name, sys_calls in summary_elem.items():
+			for sys_call in sys_calls:
+				if (sys_call_name == 'dll_loaded' or \
+					sys_call_name == 'file_opened' or \
+					sys_call_name == 'regkey_opened' or \
+					sys_call_name == 'regkey_read'):
+						self.os_operations.append(ReadOperation(sys_call_name, sys_call))
+
+		#behavior data from virustotal
+		scan_elem = self._access_data_elem(self.data_file, 'virustotal_scans')
+		# print dict_as_json(scan_elem)
+		for av_name, av_scan in scan_elem.items():
+			if av_scan['result'] is None: continue 
+			self.os_operations.append(VirusTotalOperation(av_name, av_scan['result']))
+
+		#TODO - behavior data from networking
+
+	def get_operations(self):
+		return self.os_operations
+
 class OSOperation(object):
-	"""Base abstract class for OS operations."""
 	def __init__(self, name, entry):
 		self.name = name.lower()
 		self.entry = entry.lower()
@@ -60,53 +110,11 @@ class VirusTotalOperation(OSOperation):
 class NetworkOperation(OSOperation):
 	def get_type(self):
 		return 'network'
-
 	def get_operation(self):
 		return self.name + '|' + self.entry
 
-class BehavioralProfile(object):
-	def __init__(self, data_file):
-		self.data_file = data_file
-		self.os_operations = []
-		self._create_profile()
-
-	def _access_tree_elem(self, tree ,feature_name):
-		tree_elem = tree
-
-		args = feature_name.split('_')
-		for arg in args:
-			if not tree_elem.has_key(arg): 
-				return dict()
-
-			tree_elem = tree_elem[arg]
-
-		return tree_elem
-
-	def _create_profile(self):
-		#behavior data from files
-		sum_elem = self._access_tree_elem(self.data_file, "behavior_summary")
-		# print dict_as_json(sum_elem)
-		for sys_call_name, sys_calls in sum_elem.iteritems():
-			for sys_call in sys_calls:
-				if (sys_call_name == 'dll_loaded' or \
-					sys_call_name == 'file_opened' or \
-					sys_call_name == 'regkey_opened' or \
-					sys_call_name == 'regkey_read'):
-						self.os_operations.append(ReadOperation(sys_call_name, sys_call))
-
-		#behavior data from virustotal
-		scan_elem = self._access_tree_elem(self.data_file, "virustotal_scans")
-		# print dict_as_json(scan_elem)
-		for av_name, av_scan in scan_elem.iteritems():
-			if av_scan['result'] is None: continue 
-			self.os_operations.append(VirusTotalOperation(av_name, av_scan['result']))
-
-		#TODO - behavior data from networking 
-
-	def get_operations(self):
-		return self.os_operations
-
-class FeatureExtractor(object):
+#Feature extraction
+class OSOperationsFeatureExtractor(object):
 	def __init__(self, behavioral_profiles):
 		self.behavioral_profiles = behavioral_profiles
 		self._create_feature_set()
@@ -132,7 +140,7 @@ class FeatureExtractor(object):
 				if feature_dic[op] <= 1: continue
 				feature_elem[op.get_operation()] = 1
 
-			# print (repr(op) + " times: " + str(op_num))
+			# print (repr(op) + ' times: ' + str(op_num))
 			self.feature_set.add(op.get_operation())
 			features_list.append(feature_elem)
 
@@ -160,50 +168,49 @@ class FeatureExtractor(object):
 	def get_reduced_data(self):
 		return self.reduced_data
 
-class KMeans(object):
-	def __init__(self, vectorized_data, n_clusters):
-		self.vectorized_data = vectorized_data
-		self.n_clusters = n_clusters
 
-		self.cluster = cluster.KMeans(init='k-means++', n_clusters=self.n_clusters, n_init=10)
+#################################################################
+#Behavioral profile based on idea 2
+class APIProfile(BehavioralProfile):
+	def __init__(self, data_file, data_files):
+		super().__init__(data_file)
+		self.data_files = data_files
+		self._create_profile()
 
-	def run_clustering(self):
-		self.cluster.fit(self.vectorized_data)
+	def _create_profile(self):
+		#td-idf counts list
+		apistats_counts = []
+		#behavior apistats data from files
+		for data_file in self.data_files:
+			apistats_elem = self._access_data_elem(self.data_file, 'behavior_apistats')
 
-	def labels(self):
-		return self.cluster.labels_
+			curr_api_dict = defaultdict(int)
+			for pid, api_calls in apistats_elem():
+				for api_call_name, api_call_val in api_calls.items():
+					curr_api_dict[api_call_name] += api_call_val
 
-	def vizualize_results_in_2d(self, reduced_data):	
-		# Step size of the mesh. Decrease to increase the quality of the VQ.
-		h = .015     # point in the mesh [x_min, m_max]x[y_min, y_max].
+			print
 
-		# Plot the decision boundary. For that, we will assign a color to each
-		x_min, x_max = reduced_data[:, 0].min() - 1, reduced_data[:, 0].max() + 1
-		y_min, y_max = reduced_data[:, 1].min() - 1, reduced_data[:, 1].max() + 1
-		xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+			#convert curr_api_dict to curr_api_list - remember array positioning
 
-		# Obtain labels for each point in mesh. Use last trained model.
-		Z = self.cluster.predict(np.c_[xx.ravel(), yy.ravel()])
+			apistats_counts.append(curr_api_dict)
 
-		# Put the result into a color plot
-		Z = Z.reshape(xx.shape)
-		plt.figure(1)
-		plt.clf()
-		plt.imshow(Z, interpolation='nearest',
-		           extent=(xx.min(), xx.max(), yy.min(), yy.max()),
-		           cmap=plt.cm.Paired,
-		           aspect='auto', origin='lower')
+		transformer = TfidfTransformer()
+		tfidf = transformer.fit_transform(apistats_counts)
 
-		plt.plot(reduced_data[:, 0], reduced_data[:, 1], 'k.', markersize=2)
-		# Plot the centroids as a white X
-		centroids = self.cluster.cluster_centers_
-		plt.scatter(centroids[:, 0], centroids[:, 1],
-		            marker='x', s=169, linewidths=3,
-		            color='w', zorder=10)
-		plt.title('K-means clustering on the digits dataset (PCA-reduced data)\n'
-		          'Centroids are marked with white cross')
-		plt.xlim(x_min, x_max)
-		plt.ylim(y_min, y_max)
-		plt.xticks(())
-		plt.yticks(())
-		plt.show()
+	def get_feature_set(self):
+		return self.feature_set
+
+	def get_vectorized_data(self):
+		return self.vectorized_data
+
+	def get_reduced_data(self):
+		return self.reduced_data
+
+class APIFeatureExtractor(object):
+	def __init__(self, behavioral_profiles):
+		self.behavioral_profiles = behavioral_profiles
+		self._create_feature_set()
+
+	def _create_feature_set(self):
+		pass
